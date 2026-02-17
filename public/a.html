@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>히라가나 AI 트레이너</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+            height: 100%;
+        }
+        
+        /* 일본어 전용 서체 적용 */
+        .jp-font { 
+            font-family: 'Klee One', 'Noto Sans JP', sans-serif; 
+        }
+        
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+        
+        .panel {
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            height: 100%;
+        }
+        
+        .left-panel {
+            flex: 1.2;
+            background-color: #ffffff;
+        }
+        
+        .right-panel {
+            flex: 0.8;
+            background-color: #f1f7ff;
+            border-left: 1px solid #e2e8f0;
+        }
+
+        .char-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            padding-top: 20px;
+        }
+
+        .char-item {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 점수 배지 스타일 */
+        .score-badge {
+            position: absolute;
+            top: -24px;
+            background: #619bd1;
+            color: white;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 8px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: translateY(10px);
+            white-space: nowrap;
+            box-shadow: 0 4px 10px rgba(97, 155, 209, 0.4);
+            z-index: 10;
+        }
+        .score-badge.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .score-badge::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #619bd1;
+        }
+
+        .char-btn {
+            width: 100%;
+            height: 65px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: 600; /* Klee One에 적합한 굵기 */
+            border-radius: 16px;
+            border: 2px solid #f1f5f9;
+            background: #ffffff;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+        .char-btn.active {
+            background-color: #619bd1;
+            color: white;
+            border-color: #619bd1;
+            box-shadow: 0 8px 20px rgba(97, 155, 209, 0.2);
+        }
+
+        .canvas-area {
+            flex: 1;
+            background: #ffffff;
+            border: 2px solid #f1f5f9;
+            border-radius: 24px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        }
+        #drawing-canvas {
+            cursor: crosshair;
+            touch-action: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
+            width: 100%;
+            border: 1px solid #e2e8f0;
+        }
+
+        .feedback-box {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 16px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #f1f5f9;
+        }
+
+        .btn-hover:active:not(:disabled) { transform: scale(0.97); }
+        .btn-hover:disabled { opacity: 0.6; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <section class="panel left-panel">
+            <!-- 탭 선택 영역 -->
+            <div id="char-selection" class="char-bar jp-font"></div>
+            
+            <div class="flex justify-center mb-3">
+                <span class="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Practice Board</span>
+            </div>
+            
+            <div class="canvas-area">
+                <canvas id="drawing-canvas"></canvas>
+            </div>
+
+            <div class="mt-8 flex gap-4">
+                <button id="clear-btn" class="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl text-sm btn-hover hover:bg-slate-200">다시 쓰기</button>
+                <button id="submit-btn" class="flex-[1.8] py-4 bg-[#619bd1] text-white font-bold rounded-2xl shadow-lg flex items-center justify-center gap-3 text-sm btn-hover hover:bg-[#5088bd]">
+                    <span id="btn-text">채점하기</span>
+                    <div id="loader" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </button>
+            </div>
+        </section>
+
+        <section class="panel right-panel">
+            <div class="h-[85px] mb-[20px]"></div>
+            <div class="flex justify-center mb-5">
+                <h3 class="text-[#619bd1] font-black text-[10px] uppercase tracking-[0.3em]">AI Analysis Result</h3>
+            </div>
+            <div id="result-container" class="result-card">
+                <div id="view-idle" class="flex flex-col items-center">
+                    <div class="w-16 h-16 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center mb-5">
+                        <span class="text-slate-200 text-2xl font-bold">?</span>
+                    </div>
+                    <p class="text-xs text-slate-400 font-medium text-center leading-relaxed">히라가나를 작성한 후<br>채점 버튼을 눌러주세요.</p>
+                </div>
+                <div id="view-result" class="hidden w-full flex flex-col items-center">
+                    <span class="text-[10px] font-bold text-slate-300 uppercase mb-2">Accuracy Score</span>
+                    <div class="flex items-baseline gap-1">
+                        <span id="score-val" class="text-7xl font-black text-[#619bd1]">0</span>
+                        <span class="text-2xl font-bold text-[#619bd1]">점</span>
+                    </div>
+                    <div class="feedback-box">
+                        <div class="text-[9px] font-bold text-[#619bd1] uppercase mb-2 tracking-widest">AI Feedback</div>
+                        <p id="feedback-text" class="text-[13px] text-slate-600 font-medium leading-relaxed break-keep"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-auto pt-8 text-center">
+                <p id="error-log" class="text-red-400 text-[10px] mb-4 h-4 font-medium px-4"></p>
+                <p class="text-[9px] font-bold text-slate-300 tracking-[0.5em] uppercase opacity-50">Intelligence Study Platform</p>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // 백엔드 서버 URL
+        const serverUrl = "https://hiragana-backend.vercel.app/api/score";
+        
+        const displayChars = ["あ", "い", "う", "え", "お"];
+        let currentTarget = "あ";
+        let hasDrawn = false;
+        let isProcessing = false;
+        let charScores = { "あ": null, "い": null, "う": null, "え": null, "お": null };
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        let isDrawing = false;
+
+        function initCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 8; // 기본 굵기 고정
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            resetBounds();
+        }
+
+        function resetBounds() {
+            minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
+        }
+
+        function updateBounds(x, y) {
+            const pad = ctx.lineWidth;
+            minX = Math.min(minX, x - pad);
+            minY = Math.min(minY, y - pad);
+            maxX = Math.max(maxX, x + pad);
+            maxY = Math.max(maxY, y + pad);
+        }
+
+        window.addEventListener('load', () => {
+            initCanvas();
+            renderTabs();
+        });
+
+        function renderTabs() {
+            const container = document.getElementById('char-selection');
+            container.innerHTML = '';
+            displayChars.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'char-item';
+                
+                const badge = document.createElement('div');
+                badge.id = `badge-${c}`;
+                const scoreValue = charScores[c];
+                const isScored = scoreValue !== null && scoreValue !== undefined;
+                badge.className = `score-badge ${isScored ? 'visible' : ''}`;
+                badge.innerText = isScored ? `${scoreValue}점` : '';
+                
+                const btn = document.createElement('button');
+                btn.className = `char-btn ${c === currentTarget ? 'active' : ''}`;
+                btn.innerText = c;
+                btn.onclick = () => {
+                    if(isProcessing) return;
+                    currentTarget = c;
+                    clearCanvas();
+                    renderTabs();
+                    if(charScores[c] !== null) {
+                        displayResult(charScores[c], "이전에 분석한 결과입니다. 다시 작성하여 채점할 수 있습니다.");
+                    }
+                };
+                
+                item.appendChild(badge);
+                item.appendChild(btn);
+                container.appendChild(item);
+            });
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            hasDrawn = false;
+            resetBounds();
+            document.getElementById('view-idle').classList.remove('hidden');
+            document.getElementById('view-result').classList.add('hidden');
+            document.getElementById('error-log').innerText = '';
+        }
+
+        function displayResult(score, feedback) {
+            document.getElementById('view-idle').classList.add('hidden');
+            document.getElementById('view-result').classList.remove('hidden');
+            document.getElementById('score-val').innerText = score;
+            document.getElementById('feedback-text').innerText = feedback;
+        }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (cx - rect.left) * (canvas.width / rect.width),
+                y: (cy - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        const handleStart = (e) => {
+            if(isProcessing) return;
+            isDrawing = true; hasDrawn = true;
+            const p = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            updateBounds(p.x, p.y);
+        };
+
+        const handleMove = (e) => {
+            if(!isDrawing || isProcessing) return;
+            const p = getPos(e);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            updateBounds(p.x, p.y);
+        };
+
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(e); }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
+        canvas.addEventListener('touchend', () => isDrawing = false);
+
+        document.getElementById('clear-btn').onclick = clearCanvas;
+
+        function getOptimizedImageData() {
+            let left = Math.max(0, minX);
+            let top = Math.max(0, minY);
+            let width = Math.min(canvas.width - left, maxX - minX);
+            let height = Math.min(canvas.height - top, maxY - minY);
+
+            if (width < 50 || height < 50) {
+                left = 0; top = 0; width = canvas.width; height = canvas.height;
+            }
+
+            const tempCanvas = document.createElement('canvas');
+            const targetSize = 300; 
+            tempCanvas.width = targetSize;
+            tempCanvas.height = targetSize;
+            const tCtx = tempCanvas.getContext('2d');
+            
+            tCtx.fillStyle = "white";
+            tCtx.fillRect(0,0,targetSize,targetSize);
+            
+            const scale = Math.min(targetSize / width, targetSize / height) * 0.8;
+            const dx = (targetSize - width * scale) / 2;
+            const dy = (targetSize - height * scale) / 2;
+            
+            tCtx.drawImage(canvas, left, top, width, height, dx, dy, width * scale, height * scale);
+            return tempCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+        }
+
+        async function performAiAnalysis() {
+            if(!hasDrawn || isProcessing) {
+                if(!hasDrawn) document.getElementById('error-log').innerText = '글자를 먼저 써주세요.';
+                return;
+            }
+            
+            isProcessing = true;
+            const loader = document.getElementById('loader');
+            const btnText = document.getElementById('btn-text');
+            const submitBtn = document.getElementById('submit-btn');
+            
+            loader.classList.remove('hidden');
+            submitBtn.disabled = true;
+            btnText.innerText = '채점 중...';
+
+            const base64Image = getOptimizedImageData();
+
+            try {
+                // 백엔드 서버로 요청
+                const response = await fetch(serverUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        target: currentTarget,
+                        imageData: base64Image
+                    })
+                });
+                
+                if (!response.ok) throw new Error('서버 오류');
+                const result = await response.json();
+                
+                charScores[currentTarget] = result.score;
+                const badge = document.getElementById(`badge-${currentTarget}`);
+                if(badge) {
+                    badge.innerText = `${result.score}점`;
+                    badge.classList.add('visible');
+                }
+                
+                displayResult(result.score, result.feedback);
+            } catch (err) {
+                console.error('Error:', err);
+                document.getElementById('error-log').innerText = '연결이 지연되고 있습니다. 다시 시도해주세요.';
+            } finally {
+                isProcessing = false;
+                submitBtn.disabled = false;
+                loader.classList.add('hidden');
+                btnText.innerText = '채점하기';
+            }
+        }
+
+        document.getElementById('submit-btn').onclick = performAiAnalysis;
+    </script>
+</body>
+</html>
