@@ -41,19 +41,19 @@
         <section class="panel right-panel">
             <div id="result-container" class="result-card">
                 <div id="view-idle" class="flex flex-col items-center">
-                    <p class="text-xs text-slate-400 font-medium text-center">히라가나를 작성한 후<br>채점 버튼을 눌러주세요.</p>
+                    <p class="text-xs text-slate-400 font-medium text-center leading-relaxed">히라가나를 작성한 후<br>채점 버튼을 눌러주세요.</p>
                 </div>
                 <div id="view-result" class="hidden w-full flex flex-col items-center">
                     <div class="flex items-baseline gap-1"><span id="score-val" class="text-7xl font-black text-[#619bd1]">0</span><span class="text-2xl font-bold text-[#619bd1]">점</span></div>
                     <div class="feedback-box"><p id="feedback-text" class="text-[13px] text-slate-600 font-medium leading-relaxed"></p></div>
                 </div>
             </div>
-            <div class="mt-auto pt-8 text-center"><p id="error-log" class="text-red-400 text-[10px] mb-4 h-4 font-medium"></p></div>
+            <div class="mt-auto pt-8 text-center"><p id="error-log" class="text-red-400 text-[10px] mb-4 h-4 font-medium px-4"></p></div>
         </section>
     </div>
 
     <script>
-        const displayChars = ["あ", "い", "う", "え", "오"];
+        const displayChars = ["あ", "い", "う", "え", "お"];
         let currentTarget = "あ";
         let hasDrawn = false;
         let isProcessing = false;
@@ -65,11 +65,9 @@
 
         function initCanvas() {
             const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-            ctx.lineCap = 'round';
-            ctx.lineWidth = 8;
-            ctx.strokeStyle = '#1e293b';
+            canvas.width = rect.width; canvas.height = rect.height;
+            ctx.lineCap = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#1e293b';
+            ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         window.addEventListener('load', () => { initCanvas(); renderTabs(); });
@@ -82,42 +80,48 @@
                 item.className = 'char-item';
                 const badge = document.createElement('div');
                 badge.className = `score-badge ${charScores[c] !== null ? 'visible' : ''}`;
-                badge.innerText = `${charScores[c]}점`;
+                badge.innerText = charScores[c] !== null ? `${charScores[c]}점` : '';
                 const btn = document.createElement('button');
                 btn.className = `char-btn ${c === currentTarget ? 'active' : ''}`;
                 btn.innerText = c;
-                btn.onclick = () => { currentTarget = c; clearCanvas(); renderTabs(); };
+                btn.onclick = () => { if(isProcessing) return; currentTarget = c; clearCanvas(); renderTabs(); };
                 item.appendChild(badge); item.appendChild(btn); container.appendChild(item);
             });
         }
 
         function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
             hasDrawn = false;
             document.getElementById('view-idle').classList.remove('hidden');
             document.getElementById('view-result').classList.add('hidden');
             document.getElementById('error-log').innerText = '';
         }
 
-        canvas.addEventListener('mousedown', () => { isDrawing = true; hasDrawn = true; ctx.beginPath(); });
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isDrawing) return;
+        const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-            ctx.stroke();
-        });
-        window.addEventListener('mouseup', () => isDrawing = false);
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: cx - rect.left, y: cy - rect.top };
+        };
 
-        // ✅ 수정된 서버 주소 (상대 경로로 설정하여 오류 방지)
-        const SERVER_URL = "/api/score";
+        canvas.addEventListener('mousedown', (e) => { if(isProcessing) return; isDrawing = true; hasDrawn = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+        canvas.addEventListener('mousemove', (e) => { if(!isDrawing || isProcessing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); if(isProcessing) return; isDrawing = true; hasDrawn = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if(!isDrawing || isProcessing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }, {passive: false});
+        canvas.addEventListener('touchend', () => isDrawing = false);
+
+        // ✅ 백엔드 주소 자동 매칭 (가장 안전한 방법)
+        const SERVER_URL = window.location.origin + "/api/score";
 
         async function performAiAnalysis() {
             if(!hasDrawn || isProcessing) return;
             isProcessing = true;
             document.getElementById('loader').classList.remove('hidden');
-            document.getElementById('btn-text').innerText = '채점 중...';
+            document.getElementById('btn-text').innerText = '분석 중...';
+            document.getElementById('error-log').innerText = '';
 
-            const imageData = canvas.toDataURL('image/jpeg').split(',')[1];
+            const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
             try {
                 const response = await fetch(SERVER_URL, {
@@ -126,9 +130,12 @@
                     body: JSON.stringify({ target: currentTarget, imageData })
                 });
                 
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.details || '서버 오류');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText.includes('page could not be found') ? '서버 연결 실패 (URL 오류)' : 'AI 응답 오류');
+                }
 
+                const result = await response.json();
                 charScores[currentTarget] = result.score;
                 document.getElementById('score-val').innerText = result.score;
                 document.getElementById('feedback-text').innerText = result.feedback;
@@ -136,6 +143,7 @@
                 document.getElementById('view-result').classList.remove('hidden');
                 renderTabs();
             } catch (err) {
+                console.error(err);
                 document.getElementById('error-log').innerText = '오류: ' + err.message;
             } finally {
                 isProcessing = false;
@@ -143,6 +151,7 @@
                 document.getElementById('btn-text').innerText = '채점하기';
             }
         }
+
         document.getElementById('submit-btn').onclick = performAiAnalysis;
         document.getElementById('clear-btn').onclick = clearCanvas;
     </script>
