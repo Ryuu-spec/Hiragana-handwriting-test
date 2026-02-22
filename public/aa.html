@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>히라가나 채점기</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Noto+Sans+KR:wght@300;400;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2b5aad;
+    --paper: #eef4ff;
+    --red: #e05555;
+    --gold: #2b5aad;
+    --green: #3a9e72;
+    --orange: #f0a500;
+    --blue: #5b8fee;
+    --border: #c5d8f8;
+    --shadow: rgba(43,90,173,0.10);
+    --accent: #4a7de8;
+    --card-bg: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #e8f0fe;
+    color: #1a2e5a;
+    font-family: 'Noto Sans KR', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* HEADER */
+  header {
+    background: #2b5aad;
+    color: #ffffff;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #7aaeff;
+    flex-shrink: 0;
+  }
+  .logo { font-family: 'Noto Serif JP', serif; font-size: 1.15rem; letter-spacing: 0.05em; }
+  .logo span { color: var(--gold); }
+  .api-btn {
+    background: transparent;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    transition: all 0.2s;
+  }
+  .api-btn:hover { background: var(--gold); color: var(--ink); }
+
+  /* LAYOUT */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 480px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* CENTER */
+  .canvas-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 14px;
+    overflow-y: auto;
+    background: #e8f0fe;
+  }
+
+  /* 문자 선택 버튼 5개 */
+  .char-selector {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .char-selector { flex-direction: column; align-items: center; gap: 0; }
+  .char-selector-row { display: flex; gap: 10px; }
+  .char-btn-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .score-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem; font-weight: 700;
+    background: #2b5aad; color: white;
+    padding: 2px 7px; border-radius: 20px;
+    opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+  .score-badge.visible { opacity: 1; }
+  .score-badge.grade-a { background: #2b5aad; }
+  .score-badge.grade-b { background: #3a9e72; }
+  .score-badge.grade-c { background: #f0a500; }
+  .score-badge.grade-d { background: #e05555; }
+  .char-btn {
+    width: 62px;
+    height: 66px;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'Noto Serif JP', serif;
+    font-size: 1.6rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .char-btn:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+  .char-btn.active { background: #2b5aad; color: white; border-color: #2b5aad; }
+  .char-btn .romaji-small {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.48rem;
+    opacity: 0.5;
+    line-height: 1;
+  }
+  .char-btn.active .romaji-small { opacity: 0.65; }
+
+  /* 현재 문자 */
+  .target-char {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 4.5rem;
+    line-height: 1;
+    text-align: center;
+  }
+  .target-char .romaji {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    color: #999;
+    margin-top: 4px;
+  }
+
+  /* 캔버스 */
+  .canvas-wrap { position: relative; display: inline-block; }
+  #guideCanvas {
+    position: absolute; top: 0; left: 0;
+    pointer-events: none; z-index: 1;
+    opacity: 1;
+  }
+  #drawCanvas {
+    display: block; position: relative; z-index: 2;
+    border: 2px solid #c5d8f8; border-radius: 12px;
+    background: white; cursor: crosshair; touch-action: none;
+    box-shadow: 0 4px 20px rgba(43,90,173,0.12);
+  }
+
+  .canvas-info {
+    display: flex; gap: 20px;
+    font-size: 0.73rem; color: #aaa;
+    font-family: 'DM Mono', monospace;
+    align-items: center;
+  }
+  .stroke-badge {
+    background: #2b5aad; color: white;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 0.78rem;
+  }
+
+  .btn-row { display: flex; gap: 10px; }
+  .btn {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    font-family: 'Noto Sans KR', sans-serif; font-size: 0.88rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-clear { background: #f0ece0; color: var(--ink); border: 1.5px solid var(--border); }
+  .btn-clear:hover { background: #e8e2d0; }
+  .btn-score { background: #2b5aad; color: white; font-weight: 700; }
+  .btn-score:hover { background: #1e4694; transform: translateY(-1px); }
+
+  /* RIGHT PANEL */
+  .feedback-panel {
+    border-left: 1px solid #c5d8f8;
+    display: flex; flex-direction: column;
+    overflow: hidden; background: #f5f8ff;
+  }
+  .feedback-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    font-size: 0.72rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #888; flex-shrink: 0;
+  }
+  .feedback-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+  .empty-state {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100%; color: #bbb; text-align: center; gap: 10px;
+  }
+  .empty-state .big { font-family: 'Noto Serif JP', serif; font-size: 3.5rem; opacity: 0.12; }
+  .empty-state p { font-size: 0.82rem; line-height: 1.7; }
+
+  .loading { display: none; text-align: center; padding: 40px 20px; color: #888; }
+  .loading.on { display: block; }
+  .spinner {
+    width: 30px; height: 30px;
+    border: 3px solid #f0ece0; border-top-color: var(--ink);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result { display: none; }
+  .result.on { display: block; }
+
+  .total-score {
+    text-align: center; padding: 18px 0;
+    border-bottom: 1px solid var(--border); margin-bottom: 16px;
+  }
+  .grade {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 3rem; font-weight: 700; line-height: 1;
+  }
+  .grade.A { color: #2b5aad; }
+  .grade.B { color: #3a9e72; }
+  .grade.C { color: #f0a500; }
+  .grade.D { color: #e05555; }
+  .score-num { font-family: 'DM Mono', monospace; font-size: 1rem; color: #666; margin-top: 4px; }
+
+  .rubric-item { margin-bottom: 12px; }
+  .rubric-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .rubric-name { font-size: 0.76rem; font-weight: 700; }
+  .rubric-val { font-family: 'DM Mono', monospace; font-size: 0.73rem; color: #666; }
+  .bar-bg { height: 6px; background: #f0ece0; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+
+  .ai-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .ai-section h4 { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 10px; }
+  .card {
+    border-left: 3px solid #2b5aad; background: #eef4ff;
+    padding: 10px 13px; border-radius: 0 8px 8px 0;
+    font-size: 0.82rem; line-height: 1.7; margin-bottom: 8px;
+  }
+  .card.err { border-left-color: #e05555; background: #fff0f0; }
+  .card.tip { border-left-color: #3a9e72; background: #f0fff8; }
+
+  /* MODAL */
+  .modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(26,26,46,0.6); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-bg.on { display: flex; }
+  .modal {
+    background: white; border-radius: 12px;
+    padding: 30px; width: 380px; max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h3 { font-size: 1.05rem; margin-bottom: 8px; }
+  .modal p { font-size: 0.8rem; color: #666; margin-bottom: 16px; line-height: 1.6; }
+  .modal input {
+    width: 100%; padding: 9px 13px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    font-family: 'DM Mono', monospace; font-size: 0.82rem;
+    margin-bottom: 14px; outline: none; transition: border-color 0.2s;
+  }
+  .modal input:focus { border-color: var(--ink); }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-cancel { padding: 7px 18px; background: #f0ece0; border: none; border-radius: 6px; cursor: pointer; font-family: 'Noto Sans KR', sans-serif; }
+  .btn-save { padding: 7px 18px; background: var(--ink); color: white; border: none; border-radius: 6px; cursor: pointer; font-family: 'Noto Sans KR', sans-serif; }
+</style>
+</head>
+<body>
+
+<header style="padding:8px 24px;">
+  <div class="logo" style="font-size:0.85rem; opacity:0.7;">히라가나 채점기</div>
+</header>
+
+<main>
+  <div class="canvas-area">
+
+    <!-- あいうえお 5개 버튼 -->
+    <div class="char-selector" id="charSelector"></div>
+
+
+
+    <!-- 캔버스 -->
+    <div class="canvas-wrap">
+      <canvas id="guideCanvas" width="300" height="300"></canvas>
+      <canvas id="drawCanvas" width="300" height="300"></canvas>
+    </div>
+
+
+
+    <div class="btn-row">
+      <button class="btn btn-clear" onclick="clearCanvas()">지우기</button>
+      <button class="btn btn-score" onclick="scoreWriting()">AI 채점하기</button>
+    </div>
+
+  </div>
+
+  <!-- 피드백 패널 -->
+  <div class="feedback-panel">
+    <div class="feedback-header">채점 결과 · 피드백</div>
+    <div class="feedback-body" id="feedbackBody">
+      <div class="empty-state" id="emptyState">
+        <div class="big">あ</div>
+        <p>위에서 글자를 선택하고<br>캔버스에 써보세요.<br><br>AI 채점하기를 누르면<br>피드백이 나와요.</p>
+      </div>
+      <div class="loading" id="loadingEl">
+        <div class="spinner"></div>
+        <p>AI가 채점 중이에요...</p>
+      </div>
+      <div class="result" id="resultEl">
+        <div class="total-score">
+          <div class="grade" id="gradeEl">S</div>
+          <div class="score-num" id="scoreEl">95 / 100</div>
+        </div>
+        <div id="rubricEl"></div>
+        <div class="ai-section">
+          <h4>AI 피드백</h4>
+          <div id="feedbackEl"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+
+
+<script>
+// ── 데이터 ──────────────────────────────
+const CHARS = [
+  { char: 'あ', romaji: 'a',  strokes: 3 },
+  { char: 'い', romaji: 'i',  strokes: 2 },
+  { char: 'う', romaji: 'u',  strokes: 2 },
+  { char: 'え', romaji: 'e',  strokes: 2 },
+  { char: 'お', romaji: 'o',  strokes: 3 },
+];
+
+// ── 규칙 기반 필순 정의 ─────────────────
+// 각 획: { dir: 방향벡터기준, xStart: 시작X위치(0=left,1=right), yStart: 시작Y위치(0=top,1=bot) }
+// 방향: 'right'=오른쪽, 'down'=아래, 'left'=왼쪽, 'down-right'=대각선 등
+const STROKE_RULES = {
+  'あ': [
+    { label: '1획: 가로획 (왼→오)', xDir: 1, yDir: 0, startSide: 'top-left'  },
+    { label: '2획: 세로획 (위→아래)', xDir: 0, yDir: 1, startSide: 'top-center' },
+    { label: '3획: 둥근 마무리 (오른쪽→왼쪽 곡선)', xDir: -0.5, yDir: 0.5, startSide: 'top-right' },
+  ],
+  'い': [
+    { label: '1획: 왼쪽 세로 (위→아래)', xDir: 0.2, yDir: 1, startSide: 'top-left' },
+    { label: '2획: 오른쪽 세로 (위→아래 길게)', xDir: -0.3, yDir: 1, startSide: 'top-right' },
+  ],
+  'う': [
+    { label: '1획: 위 점/가로', xDir: 0.5, yDir: 0.2, startSide: 'top-center' },
+    { label: '2획: 곡선 (오른쪽 위→아래→왼쪽)', xDir: -0.5, yDir: 0.5, startSide: 'top-right' },
+  ],
+  'え': [
+    { label: '1획: 가로획 (왼→오)', xDir: 1, yDir: 0, startSide: 'top-left' },
+    { label: '2획: 세로+곡선 (위→아래→왼쪽)', xDir: -0.3, yDir: 1, startSide: 'top-center' },
+  ],
+  'お': [
+    { label: '1획: 가로획 (왼→오)', xDir: 1, yDir: 0, startSide: 'top-left' },
+    { label: '2획: 세로획 (위→아래)', xDir: 0, yDir: 1, startSide: 'top-center' },
+    { label: '3획: 둥근 마무리 (오른쪽→왼쪽 곡선)', xDir: -0.5, yDir: 0.5, startSide: 'top-right' },
+  ],
+};
+
+// ── 획 벡터 분석 ────────────────────────
+function analyzeStroke(pts) {
+  if (pts.length < 2) return null;
+  const first = pts[0];
+  const last  = pts[pts.length - 1];
+  const dx = last.x - first.x;
+  const dy = last.y - first.y;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  return { dx, dy, len, nx: dx/len, ny: dy/len, startX: first.x, startY: first.y };
+}
+
+function scoreStrokeOrder(strokes, canvasSize) {
+  const rules = STROKE_RULES[current.char];
+  const expected = rules ? rules.length : current.strokes;
+
+  // 획 수 불일치 → 크게 감점
+  if (strokes.length !== expected) {
+    const diff = Math.abs(strokes.length - expected);
+    return Math.max(0, 25 - diff * 8);
+  }
+
+  // 획 수 일치 → 방향 체크 (대충 맞으면 만점)
+  if (!rules) return 25;
+  let score = 25;
+  strokes.forEach((pts, i) => {
+    const rule = rules[i];
+    const vec  = analyzeStroke(pts);
+    if (!vec) return;
+    const rLen = Math.sqrt(rule.xDir*rule.xDir + rule.yDir*rule.yDir);
+    const dot  = (vec.nx * rule.xDir/rLen) + (vec.ny * rule.yDir/rLen);
+    // dot > 0.3이면 "대충 맞음" → 만점 유지, 그 이하면 감점
+    if (dot < 0.3) score -= 6;
+  });
+  return Math.max(0, score);
+}
+
+// ── 상태 ────────────────────────────────
+// API 키는 서버에서 관리 (Vercel 환경변수)
+let current     = CHARS[0];
+let strokes     = [];
+let curStroke   = [];
+let isDrawing   = false;
+let charScores  = {};
+
+// ── 초기화 ──────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  buildButtons();
+  selectChar(CHARS[0]);
+  initCanvas();
+});
+
+function buildButtons() {
+  const wrap = document.getElementById('charSelector');
+  wrap.className = 'char-selector-row';
+  CHARS.forEach(cd => {
+    const outer = document.createElement('div');
+    outer.className = 'char-btn-wrap';
+
+    const badge = document.createElement('div');
+    badge.className = 'score-badge';
+    badge.id = 'badge-' + cd.char;
+    badge.textContent = '';
+
+    const btn = document.createElement('button');
+    btn.className = 'char-btn';
+    btn.id = 'cbtn-' + cd.char;
+
+    const cSpan = document.createElement('span'); cSpan.textContent = cd.char;
+    const rSpan = document.createElement('span'); rSpan.className = 'romaji-small'; rSpan.textContent = cd.romaji;
+
+    btn.append(cSpan, rSpan);
+    btn.addEventListener('click', () => selectChar(cd));
+    outer.append(badge, btn);
+    wrap.appendChild(outer);
+  });
+}
+
+function selectChar(cd) {
+  current = cd;
+  document.querySelectorAll('.char-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('cbtn-' + cd.char);
+  if (btn) btn.classList.add('active');
+  // (표시 요소 삭제됨 - 참조 제거)
+  clearCanvas();
+  resetResult();
+  drawGuide();
+}
+
+// ── 캔버스 ──────────────────────────────
+function initCanvas() {
+  const c = document.getElementById('drawCanvas');
+  c.addEventListener('mousedown',  e => startDraw(e));
+  c.addEventListener('mousemove',  e => continueDraw(e));
+  c.addEventListener('mouseup',    () => endDraw());
+  c.addEventListener('mouseleave', () => endDraw());
+  c.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+  c.addEventListener('touchmove',  e => { e.preventDefault(); continueDraw(e.touches[0]); }, { passive: false });
+  c.addEventListener('touchend',   e => { e.preventDefault(); endDraw(); }, { passive: false });
+}
+
+function getXY(e) {
+  const c    = document.getElementById('drawCanvas');
+  const rect = c.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (c.width  / rect.width),
+    y: (e.clientY - rect.top)  * (c.height / rect.height),
+    t: Date.now()
+  };
+}
+
+function startDraw(e)    { isDrawing = true; curStroke = [getXY(e)]; }
+function endDraw()       {
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (curStroke.length) {
+    strokes.push([...curStroke]);
+
+  }
+  curStroke = [];
+}
+function continueDraw(e) {
+  if (!isDrawing) return;
+  const pos = getXY(e);
+  const ctx = document.getElementById('drawCanvas').getContext('2d');
+  if (curStroke.length) {
+    const prev = curStroke[curStroke.length - 1];
+    ctx.beginPath();
+    ctx.moveTo(prev.x, prev.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth   = 3.5;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+  }
+  curStroke.push(pos);
+}
+
+function clearCanvas() {
+  const c = document.getElementById('drawCanvas');
+  c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  strokes = []; curStroke = [];
+}
+
+function drawGuide() {
+  const c   = document.getElementById('guideCanvas');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  // 십자 가이드라인
+  ctx.setLineDash([6, 5]);
+  ctx.strokeStyle = 'rgba(43, 90, 173, 0.25)';
+  ctx.lineWidth = 1.2;
+  // 가로선
+  ctx.beginPath();
+  ctx.moveTo(0, c.height / 2);
+  ctx.lineTo(c.width, c.height / 2);
+  ctx.stroke();
+  // 세로선
+  ctx.beginPath();
+  ctx.moveTo(c.width / 2, 0);
+  ctx.lineTo(c.width / 2, c.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function toggleGuide() {
+  document.getElementById('guideCanvas').style.opacity =
+    document.getElementById('guideToggle').checked ? '0.12' : '0';
+}
+
+// ── 채점 ────────────────────────────────
+async function scoreWriting() {
+  if (!strokes.length) { alert('먼저 글자를 써주세요!'); return; }
+
+
+  showLoading(true);
+  try {
+    // 규칙 기반 필순 점수 먼저 계산
+    const c = document.getElementById('drawCanvas');
+    const strokeOrderScore = scoreStrokeOrder(strokes, c.width);
+
+    const img    = c.toDataURL('image/png').split(',')[1];
+    const result = await callGemini(img, strokeOrderScore);
+    showResult(result);
+  } catch(err) {
+    showLoading(false);
+    resetResult();
+    alert('채점 오류: ' + err.message);
+  }
+}
+
+async function callGemini(imgB64, strokeOrderScore) {
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      char: current.char,
+      romaji: current.romaji,
+      strokes: strokes.length,
+      expectedStrokes: current.strokes,
+      strokeOrderScore,
+      image: imgB64
+    })
+  });
+
+  if (!res.ok) {
+    const e = await res.json();
+    throw new Error(e.error || `HTTP ${res.status}`);
+  }
+
+  const parsed = await res.json();
+  // 필순 점수 강제 고정
+  if (parsed.scores) parsed.scores['필순'] = strokeOrderScore;
+  parsed.total = Object.values(parsed.scores).reduce((a,b)=>a+b,0);
+  const t = parsed.total;
+  parsed.grade = t>=90?'A':t>=80?'B':t>=70?'C':'D';
+  return parsed;
+}
+
+// ── 결과 표시 ───────────────────────────
+function showResult(r) {
+  showLoading(false);
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultEl').classList.add('on');
+
+  const grade = r.grade || 'B';
+  const total = r.total || 0;
+
+  const gradeEl = document.getElementById('gradeEl');
+  gradeEl.textContent = grade;
+  gradeEl.className   = 'grade ' + grade;
+  document.getElementById('scoreEl').textContent = `${total} / 100`;
+
+  // 점수 뱃지 업데이트
+  const badge = document.getElementById('badge-' + current.char);
+  if (badge) {
+    badge.textContent = total + '점';
+    badge.className = 'score-badge visible grade-' + grade.toLowerCase();
+  }
+  charScores[current.char] = { grade, total };
+
+  // 루브릭 바
+  const rubrics = [
+    { name: '형태 정확성', key: '형태정확성', max: 35, color: '#1a1a2e' },
+    { name: '필순',        key: '필순',       max: 25, color: '#c9a84c' },
+    { name: '획 방향',     key: '획방향',     max: 20, color: '#2980b9' },
+    { name: '끝맺음',      key: '끝맺음',     max: 10, color: '#2d6a4f' },
+    { name: '균형·비율',   key: '균형비율',   max: 10, color: '#e67e22' },
+  ];
+  document.getElementById('rubricEl').innerHTML = rubrics.map(rb => {
+    const sc  = r.scores?.[rb.key] ?? 0;
+    const pct = Math.round((sc / rb.max) * 100);
+    return `<div class="rubric-item">
+      <div class="rubric-row">
+        <span class="rubric-name">${rb.name}</span>
+        <span class="rubric-val">${sc} / ${rb.max}</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${rb.color}"></div></div>
+    </div>`;
+  }).join('');
+
+  // 텍스트 피드백
+  let fb = '';
+  if (r.overall)        fb += `<div class="card">${r.overall}</div>`;
+  (r.errors||[]).forEach(e => { fb += `<div class="card err">⚠ ${e}</div>`; });
+  (r.tips  ||[]).forEach(t => { fb += `<div class="card tip">💡 ${t}</div>`; });
+  if (r.korean_pattern) fb += `<div class="card err">🇰🇷 ${r.korean_pattern}</div>`;
+  document.getElementById('feedbackEl').innerHTML = fb;
+}
+
+function showLoading(on) {
+  document.getElementById('loadingEl').classList.toggle('on', on);
+  if (on) {
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('resultEl').classList.remove('on');
+  }
+}
+
+function resetResult() {
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('resultEl').classList.remove('on');
+  document.getElementById('loadingEl').classList.remove('on');
+}
+
+
+</script>
+</body>
+</html>
